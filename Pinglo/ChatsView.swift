@@ -10,24 +10,16 @@ import SwiftUI
 struct ChatsView: View {
     @State private var searchText = ""
     @State private var selectedChat: Chat?
-    
-    // Sample chat data
-    @State private var chats = [
-        Chat(id: "1", name: "Sarah Johnson", username: "@sjohnson", lastMessage: "Hey! How's the project going?", timestamp: "2:30 PM", unreadCount: 3, isOnline: true),
-        Chat(id: "2", name: "Mike Chen", username: "@mchen", lastMessage: "Meeting at 3 PM today", timestamp: "1:45 PM", unreadCount: 0, isOnline: false),
-        Chat(id: "3", name: "Emma Davis", username: "@edavis", lastMessage: "Thanks for the help!", timestamp: "12:20 PM", unreadCount: 1, isOnline: true),
-        Chat(id: "4", name: "Alex Rodriguez", username: "@arodriguez", lastMessage: "Can you send me the files?", timestamp: "11:15 AM", unreadCount: 0, isOnline: false),
-        Chat(id: "5", name: "Lisa Wang", username: "@lwang", lastMessage: "Great work on the presentation!", timestamp: "Yesterday", unreadCount: 2, isOnline: true),
-        Chat(id: "6", name: "David Kim", username: "@dkim", lastMessage: "Let's catch up soon", timestamp: "Yesterday", unreadCount: 0, isOnline: false),
-        Chat(id: "7", name: "Rachel Green", username: "@rgreen", lastMessage: "Happy birthday! 🎉", timestamp: "Yesterday", unreadCount: 0, isOnline: true),
-        Chat(id: "8", name: "Tom Wilson", username: "@twilson", lastMessage: "Project deadline moved to Friday", timestamp: "2 days ago", unreadCount: 1, isOnline: false)
-    ]
+    @StateObject private var chatManager = ChatManager()
     
     var filteredChats: [Chat] {
         if searchText.isEmpty {
-            return chats
+            return chatManager.chats
         } else {
-            return chats.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
+            return chatManager.chats.filter { 
+                $0.name.localizedCaseInsensitiveContains(searchText) ||
+                $0.username.localizedCaseInsensitiveContains(searchText)
+            }
         }
     }
     
@@ -51,11 +43,15 @@ struct ChatsView: View {
             List(filteredChats) { chat in
                 ChatRowView(chat: chat)
                     .contentShape(Rectangle())
-                    .onTapGesture {
-                        selectedChat = chat
-                    }
+                                    .onTapGesture {
+                    selectedChat = chat
+                }
             }
             .listStyle(PlainListStyle())
+            .refreshable {
+                // Simulate refresh
+                await chatManager.refreshChats()
+            }
         }
         .navigationTitle("Chats")
         .navigationBarTitleDisplayMode(.large)
@@ -70,7 +66,17 @@ struct ChatsView: View {
             }
         }
         .navigationDestination(item: $selectedChat) { chat in
-            ChatDetailView(chat: chat)
+            ChatDetailView(chat: chat, chatManager: chatManager)
+                .onAppear {
+                    // Mark chat as read when detail view appears
+                    chatManager.markChatAsRead(chatId: chat.id)
+                }
+        }
+        .onAppear {
+            chatManager.startSimulatingMessages()
+        }
+        .onDisappear {
+            chatManager.stopSimulatingMessages()
         }
     }
 }
@@ -104,28 +110,38 @@ struct ChatRowView: View {
                         .offset(x: 18, y: 18)
                 }
             }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(chat.name)
-                    .font(.body)
-                    .fontWeight(.medium)
-                    .foregroundColor(.primary)
-                Text(chat.username)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(chat.timestamp)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                if chat.unreadCount > 0 {
-                    Text("\(chat.unreadCount)")
+            
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(chat.name)
+                        .font(.body)
+                        .fontWeight(chat.unreadCount > 0 ? .semibold : .medium)
+                        .foregroundColor(.primary)
+                    Spacer()
+                    Text(chat.formattedTimestamp)
                         .font(.caption)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.white)
-                        .frame(width: 20, height: 20)
-                        .background(Color.green)
-                        .clipShape(Circle())
+                        .foregroundColor(chat.unreadCount > 0 ? .blue : .secondary)
+                }
+                
+                HStack {
+                    Text(chat.lastMessage)
+                        .font(.subheadline)
+                        .foregroundColor(chat.unreadCount > 0 ? .primary : .secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Spacer()
+                    
+                    // Unread count badge
+                    if chat.unreadCount > 0 {
+                        Text("\(chat.unreadCount)")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                            .frame(minWidth: 20, minHeight: 20)
+                            .background(Color.blue)
+                            .clipShape(Capsule())
+                            .scaleEffect(chat.unreadCount > 99 ? 0.8 : 1.0)
+                    }
                 }
             }
         }
@@ -136,6 +152,7 @@ struct ChatRowView: View {
 
 struct ChatDetailView: View {
     let chat: Chat
+    let chatManager: ChatManager
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     @State private var messageText = ""
@@ -254,6 +271,9 @@ struct ChatDetailView: View {
         messages.append(newMessage)
         messageText = ""
         
+        // Update chat manager with new message
+        chatManager.addMessage(to: chat.id, message: newMessage)
+        
         // Always scroll to bottom when sending a message
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             lastMessageId = newMessage.id
@@ -283,6 +303,9 @@ struct ChatDetailView: View {
             )
             
             messages.append(responseMessage)
+            
+            // Update chat manager with response
+            chatManager.addMessage(to: chat.id, message: responseMessage)
             
             // Auto-scroll to response
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -342,46 +365,142 @@ struct MessageBubbleView: View {
     }
 }
 
-struct NewChatView: View {
-    @Environment(\.dismiss) private var dismiss
-    @State private var searchText = ""
+// MARK: - Chat Manager
+class ChatManager: ObservableObject {
+    @Published var chats: [Chat] = []
+    private var messageSimulationTimer: Timer?
     
-    var body: some View {
-        NavigationView {
-            VStack {
-                Text("New Chat")
-                    .font(.title)
-                    .fontWeight(.bold)
-                    .padding()
-                
-                Text("Search for users to start a new conversation")
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
-                
-                Spacer()
-            }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                }
+    init() {
+        loadInitialChats()
+    }
+    
+    private func loadInitialChats() {
+        chats = [
+            Chat(id: "1", name: "Sarah Johnson", username: "@sjohnson", lastMessage: "Hey! How's the project going?", timestamp: Date().addingTimeInterval(-900), unreadCount: 1, isOnline: true),
+            Chat(id: "2", name: "Mike Chen", username: "@mchen", lastMessage: "Meeting at 3 PM today", timestamp: Date().addingTimeInterval(-6300), unreadCount: 0, isOnline: false),
+            Chat(id: "3", name: "Emma Davis", username: "@edavis", lastMessage: "Thanks for the help!", timestamp: Date().addingTimeInterval(-7200), unreadCount: 1, isOnline: true),
+            Chat(id: "4", name: "Alex Rodriguez", username: "@arodriguez", lastMessage: "Can you send me the files?", timestamp: Date().addingTimeInterval(-39600), unreadCount: 0, isOnline: false),
+            Chat(id: "5", name: "Lisa Wang", username: "@lwang", lastMessage: "Great work on the presentation!", timestamp: Date().addingTimeInterval(-86400), unreadCount: 1, isOnline: true),
+            Chat(id: "6", name: "David Kim", username: "@dkim", lastMessage: "Let's catch up soon", timestamp: Date().addingTimeInterval(-172800), unreadCount: 0, isOnline: false),
+            Chat(id: "7", name: "Rachel Green", username: "@rgreen", lastMessage: "Happy birthday! 🎉", timestamp: Date().addingTimeInterval(-259200), unreadCount: 0, isOnline: true),
+            Chat(id: "8", name: "Tom Wilson", username: "@twilson", lastMessage: "Project deadline moved to Friday", timestamp: Date().addingTimeInterval(-345600), unreadCount: 1, isOnline: false)
+        ]
+        
+        // Sort chats by most recent activity
+        sortChats()
+    }
+    
+    func markChatAsRead(chatId: String) {
+        DispatchQueue.main.async {
+            if let index = self.chats.firstIndex(where: { $0.id == chatId }) {
+                self.chats[index].unreadCount = 0
+                self.objectWillChange.send()
             }
         }
     }
+    
+    func addMessage(to chatId: String, message: Message) {
+        if let index = chats.firstIndex(where: { $0.id == chatId }) {
+            // Update chat with new message
+            chats[index].lastMessage = message.text
+            chats[index].timestamp = message.timestamp
+            
+            // Increment unread count if message is from other person
+            if !message.isFromMe {
+                chats[index].unreadCount += 1
+            }
+            
+            // Move chat to top (most recent)
+            sortChats()
+        }
+    }
+    
+    private func sortChats() {
+        chats.sort { $0.timestamp > $1.timestamp }
+    }
+    
+    func startSimulatingMessages() {
+        messageSimulationTimer = Timer.scheduledTimer(withTimeInterval: 15.0, repeats: true) { _ in
+            self.simulateIncomingMessage()
+        }
+    }
+    
+    func stopSimulatingMessages() {
+        messageSimulationTimer?.invalidate()
+        messageSimulationTimer = nil
+    }
+    
+    private func simulateIncomingMessage() {
+        let randomChats = chats.filter { $0.isOnline }.shuffled()
+        guard let randomChat = randomChats.first else { return }
+        
+        let sampleMessages = [
+            "Hey, quick question!",
+            "Did you see the latest update?",
+            "Thanks for your help!",
+            "Can we schedule a call?",
+            "Great work on this!",
+            "I'll send you the details",
+            "Let me know when you're free",
+            "Perfect timing!",
+            "Looking forward to it!",
+            "Thanks for the update"
+        ]
+        
+        let randomMessage = sampleMessages.randomElement() ?? "Hello!"
+        let newMessage = Message(
+            id: UUID().uuidString,
+            text: randomMessage,
+            isFromMe: false,
+            timestamp: Date()
+        )
+        
+        addMessage(to: randomChat.id, message: newMessage)
+    }
+    
+    @MainActor
+    func refreshChats() async {
+        // Simulate network delay
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        
+        // Update timestamps to be more recent
+        for i in 0..<chats.count {
+            chats[i].timestamp = Date().addingTimeInterval(-Double.random(in: 0...3600))
+        }
+        
+        sortChats()
+    }
 }
 
-// Data Models
+// MARK: - Data Models
 struct Chat: Identifiable, Hashable {
     let id: String
     let name: String
     let username: String
-    let lastMessage: String
-    let timestamp: String
-    let unreadCount: Int
+    var lastMessage: String
+    var timestamp: Date
+    var unreadCount: Int
     let isOnline: Bool
+    
+    var formattedTimestamp: String {
+        let now = Date()
+        let timeDifference = now.timeIntervalSince(timestamp)
+        
+        if timeDifference < 60 {
+            return "now"
+        } else if timeDifference < 3600 {
+            let minutes = Int(timeDifference / 60)
+            return "\(minutes)m"
+        } else if timeDifference < 86400 {
+            let hours = Int(timeDifference / 3600)
+            return "\(hours)h"
+        } else if timeDifference < 172800 {
+            return "Yesterday"
+        } else {
+            let days = Int(timeDifference / 86400)
+            return "\(days)d"
+        }
+    }
     
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
