@@ -14,170 +14,105 @@ struct SettingsView: View {
     @State private var showingAppearanceView = false
     @State private var showingTermsView = false
     @State private var showingPrivacyPolicyView = false
+    @AppStorage("isAuthenticated") private var isAuthenticated = true
     
     var body: some View {
         NavigationView {
             List {
-                // Account Section
+                // Profile Header
                 Section {
-                    NavigationLink(destination: AccountView()) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Account")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                Text("John Doe")
-                                    .font(.body)
-                                    .fontWeight(.medium)
-                                Text("@johndoe")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right")
+                    HStack(spacing: 16) {
+                        ZStack {
+                            Circle()
+                                .fill(LinearGradient(gradient: Gradient(colors: [Color.blue.opacity(0.9), Color.purple.opacity(0.7)]), startPoint: .topLeading, endPoint: .bottomTrailing))
+                                .frame(width: 56, height: 56)
+                            Text("J")
+                                .font(.title)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("John Doe")
+                                .font(.headline)
+                            Text("@johndoe")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
-                        .padding(.vertical, 4)
-                    }
-                }
-                
-                // Connectivity Section
-                Section {
-                    NavigationLink(destination: ConnectivityView()) {
-                        HStack {
-                            Image(systemName: "wifi")
-                                .foregroundColor(.blue)
-                                .frame(width: 24)
-                            Text("Connectivity")
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-                
-                // Privacy Section
-                Section {
-                    NavigationLink(destination: PrivacyView()) {
-                        HStack {
-                            Image(systemName: "lock.shield")
-                                .foregroundColor(.green)
-                                .frame(width: 24)
-                            Text("Privacy")
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-                
-                // Appearance Section
-                Section {
-                    NavigationLink(destination: AppearanceView()) {
-                        HStack {
-                            Image(systemName: "paintbrush")
-                                .foregroundColor(.purple)
-                                .frame(width: 24)
-                            Text("Appearance")
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-                
-                // About Section
-                Section {
-                    HStack {
-                        Image(systemName: "info.circle")
-                            .foregroundColor(.gray)
-                            .frame(width: 24)
-                        Text("Version")
                         Spacer()
-                        Text("Creation mode :)")
+                        Image(systemName: "chevron.right")
                             .foregroundColor(.secondary)
                     }
-                    
-                    NavigationLink(destination: TermsView()) {
-                        HStack {
-                            Image(systemName: "doc.text")
-                                .foregroundColor(.gray)
-                                .frame(width: 24)
-                            Text("Terms of Service")
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
+                    .padding(.vertical, 4)
+                } header: {
+                    Text("Account")
+                }
+                .onTapGesture { showingAccountView = true }
+                
+                // App Settings
+                Section(header: Text("App").textCase(.none)) {
+                    NavigationLink(destination: ConnectivityView()) {
+                        settingsRow(icon: "wifi", color: .blue, title: "Connectivity")
                     }
-                    
-                    NavigationLink(destination: PrivacyPolicyView()) {
-                        HStack {
-                            Image(systemName: "hand.raised")
-                                .foregroundColor(.gray)
-                                .frame(width: 24)
-                            Text("Privacy Policy")
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
+                    NavigationLink(destination: PrivacyView()) {
+                        settingsRow(icon: "lock.shield", color: .green, title: "Privacy")
                     }
-                    
-                    Button(action: {
-                        if let url = URL(string: "mailto:appsproutorg@gmail.com") {
-                            UIApplication.shared.open(url)
-                        }
-                    }) {
-                        HStack {
-                            Image(systemName: "envelope")
-                                .foregroundColor(.gray)
-                                .frame(width: 24)
-                            Text("Send Feedback")
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
+                    NavigationLink(destination: AppearanceView()) {
+                        settingsRow(icon: "paintbrush", color: .purple, title: "Appearance")
                     }
-                    .foregroundColor(.primary)
                 }
                 
-                // Account Actions Section
-                Section {
-                    Button(action: {
-                        // TODO: Implement logout
-                    }) {
+                // About
+                Section(header: Text("About").textCase(.none)) {
+                    HStack {
+                        Image(systemName: "info.circle").foregroundColor(.gray).frame(width: 24)
+                        Text("Version")
+                        Spacer()
+                        Text("Creation mode :)").foregroundColor(.secondary)
+                    }
+                    NavigationLink(destination: TermsView()) { settingsRow(icon: "doc.text", color: .gray, title: "Terms of Service") }
+                    NavigationLink(destination: PrivacyPolicyView()) { settingsRow(icon: "hand.raised", color: .gray, title: "Privacy Policy") }
+                    Button(action: { if let url = URL(string: "mailto:appsproutorg@gmail.com") { UIApplication.shared.open(url) } }) {
+                        settingsRow(icon: "envelope", color: .gray, title: "Send Feedback")
+                    }.foregroundColor(.primary)
+                }
+                
+                // Actions
+                Section(header: Text("Actions").textCase(.none)) {
+                    Button(action: { isAuthenticated = false }) {
                         HStack {
-                            Image(systemName: "rectangle.portrait.and.arrow.right")
-                                .foregroundColor(.orange)
-                                .frame(width: 24)
-                            Text("Log Out")
-                                .foregroundColor(.orange)
+                            Image(systemName: "rectangle.portrait.and.arrow.right").foregroundColor(.orange).frame(width: 24)
+                            Text("Log Out").foregroundColor(.orange)
                             Spacer()
                         }
                     }
-                    
-                    Button(action: {
-                        // TODO: Implement delete account
-                    }) {
+                    Button(action: { /* TODO delete account */ }) {
                         HStack {
-                            Image(systemName: "person.crop.circle.badge.minus")
-                                .foregroundColor(.red)
-                                .frame(width: 24)
-                            Text("Delete Account")
-                                .foregroundColor(.red)
+                            Image(systemName: "person.crop.circle.badge.minus").foregroundColor(.red).frame(width: 24)
+                            Text("Delete Account").foregroundColor(.red)
                             Spacer()
                         }
                     }
                 }
             }
+            .listStyle(InsetGroupedListStyle())
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.large)
+            .background(Color(.systemGroupedBackground))
+        }
+        .sheet(isPresented: $showingAccountView) {
+            NavigationView { AccountView() }
+        }
+    }
+    
+    @ViewBuilder
+    private func settingsRow(icon: String, color: Color, title: String) -> some View {
+        HStack {
+            Image(systemName: icon)
+                .foregroundColor(color)
+                .frame(width: 24)
+            Text(title)
+            Spacer()
+            Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
         }
     }
 }

@@ -11,7 +11,7 @@ import SwiftUI
 struct PingloApp: App {
     @AppStorage("appTheme") private var appTheme = "System"
     @AppStorage("appAccentColor") private var appAccentColor = "Blue"
-    @State private var isAuthenticated = false
+    @AppStorage("isAuthenticated") private var isAuthenticated = false
     
     var body: some Scene {
         WindowGroup {
