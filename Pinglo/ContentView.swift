@@ -9,13 +9,28 @@ import SwiftUI
 
 struct ContentView: View {
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+        TabView {
+            DiscoverView()
+                .tabItem {
+                    Image(systemName: "safari")
+                    Text("Discover")
+                }
+            
+            NavigationStack {
+                ChatsView()
+            }
+            .tabItem {
+                Image(systemName: "message.fill")
+                Text("Chats")
+            }
+            
+            SettingsView()
+                .tabItem {
+                    Image(systemName: "gearshape.fill")
+                    Text("Settings")
+                }
         }
-        .padding()
+        .preferredColorScheme(.none) // This allows the app to follow device settings
     }
 }
 
